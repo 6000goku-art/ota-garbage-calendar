@@ -3,4 +3,8 @@ __pycache__/
 .pytest_cache/
 venv/
 temp_*.pdf
-data/
+# data/ (tracked for GitHub Pages)
+data/towns/*.json
+!data/index.json
+!data/.gitkeep
+!data/towns/.gitkeep
