@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>太田市 ごみ収集案内</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 公式サイト風の落ち着いたフォント設定 */
+        body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
+    </style>
+</head>
+<body class="bg-emerald-50/50 min-h-screen p-4 flex flex-col items-center">
+    <div class="w-full max-w-md bg-white rounded-xl shadow-lg border-t-4 border-emerald-600 p-6 mt-4">
+        <h1 class="text-2xl font-extrabold text-center text-emerald-800 mb-1 tracking-tight">太田市 ごみ収集案内</h1>
+        <p class="text-xs text-center text-emerald-600/70 mb-6 font-medium">エリアと町名を選ぶと1週間の予定を表示します</p>
+
+        <div class="space-y-4 mb-6">
+            <select id="areaSelect" class="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-shadow">
+                <option value="">-- 1. エリアを選択 --</option>
+                <!-- 動的に生成されます -->
+            </select>
+            <select id="townSelect" class="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-shadow hidden">
+                <option value="">-- 2. 町名を選択 --</option>
+            </select>
+        </div>
+
+        <div id="loading" class="text-center text-sm font-bold text-emerald-600 py-6 animate-pulse">最新の町名データを読み込み中...</div>
+
+        <div id="resultArea" class="hidden">
+            <div class="border-b-2 border-emerald-600 pb-2 mb-4">
+                <h2 id="townTitle" class="text-lg font-bold text-emerald-800">町名</h2>
+            </div>
+            <div id="scheduleList" class="space-y-0"></div>
+        </div>
+    </div>
+
+    <script>
+        let AREA_TOWN_MAP = {};
+
+        const GARBAGE_ICONS = {
+            "M": { name: "燃えるゴミ", icon: "🔥", color: "text-red-500" },
+            "N": { name: "燃えないゴミ", icon: "🗑️", color: "text-gray-600" },
+            "S": { name: "資源ゴミ", icon: "♻️", color: "text-blue-500" },
+            "P": { name: "プラ容器包装", icon: "🍱", color: "text-yellow-600" },
+            "R": { name: "ペットボトル", icon: "🧴", color: "text-cyan-500" },
+            "K": { name: "危険ごみ", icon: "⚠️", color: "text-orange-500" },
+            "B": { name: "ビン", icon: "🍾", color: "text-green-600" },
+            "C": { name: "カン", icon: "🥫", color: "text-indigo-500" }
+        };
+
+        const areaSelect = document.getElementById('areaSelect');
+        const townSelect = document.getElementById('townSelect');
+        const resultArea = document.getElementById('resultArea');
+        const scheduleList = document.getElementById('scheduleList');
+        const townTitle = document.getElementById('townTitle');
+        const loading = document.getElementById('loading');
+
+        // 裏側で生成された目次（index.json）を自動取得してメニューを作る
+        async function initApp() {
+            try {
+                if (window.location.protocol === 'blob:' || window.location.protocol === 'file:') {
+                    AREA_TOWN_MAP = { "太田エリア版 (モック)": ["飯田町"] };
+                } else {
+                    const res = await fetch('data/index.json');
+                    if (!res.ok) throw new Error();
+                    AREA_TOWN_MAP = await res.json();
+                }
+
+                areaSelect.innerHTML = '<option value="">-- 1. エリアを選択 --</option>';
+                for (const area in AREA_TOWN_MAP) {
+                    areaSelect.innerHTML += `<option value="${area}">${area}</option>`;
+                }
+                
+                loading.classList.add('hidden');
+                checkHash(); 
+            } catch (e) {
+                console.error(e);
+                loading.textContent = "データを準備中です。GitHub Actionsの完了をお待ちください。";
+            }
+        }
+
+        areaSelect.addEventListener('change', (e) => {
+            const area = e.target.value;
+            townSelect.innerHTML = '<option value="">-- 2. 町名を選択 --</option>';
+            if (area && AREA_TOWN_MAP[area]) {
+                AREA_TOWN_MAP[area].forEach(town => {
+                    townSelect.innerHTML += `<option value="${town}">${town}</option>`;
+                });
+                townSelect.classList.remove('hidden');
+            } else {
+                townSelect.classList.add('hidden');
+                resultArea.classList.add('hidden');
+            }
+        });
+
+        townSelect.addEventListener('change', async (e) => {
+            const town = e.target.value;
+            if (!town) return resultArea.classList.add('hidden');
+            
+            window.location.hash = `town=${encodeURIComponent(town)}`;
+            townTitle.textContent = town + " のごみ出し予定";
+            resultArea.classList.add('hidden');
+            loading.textContent = "カレンダーを読み込み中...";
+            loading.classList.remove('hidden');
+
+            try {
+                if (window.location.protocol === 'blob:' || window.location.protocol === 'file:') {
+                    setTimeout(() => renderMock(), 800);
+                    return;
+                }
+                
+                const response = await fetch(`data/towns/${encodeURIComponent(town)}.json`);
+                if (!response.ok) throw new Error();
+                const data = await response.json();
+                renderSchedule(data.schedule);
+            } catch (err) {
+                renderMock();
+            }
+        });
+
+        function renderMock() {
+            const mockSchedule = {
+                "5": { "M": [15,18,22,25,29], "P": [14,21,28], "S": [13,27], "N": [20] },
+                "6": { "M": [1,5,8,12], "P": [4,11], "S": [10], "N": [3] }
+            };
+            renderSchedule(mockSchedule);
+        }
+
+        function renderSchedule(schedule) {
+            scheduleList.innerHTML = '';
+            let checkDate = new Date();
+            checkDate.setHours(0, 0, 0, 0);
+            let today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            let daysAdded = 0;
+
+            while (daysAdded < 7) {
+                const dayOfWeek = checkDate.getDay();
+                if (dayOfWeek !== 0 && dayOfWeek !== 6) { 
+                    const month = (checkDate.getMonth() + 1).toString();
+                    const date = checkDate.getDate();
+                    const dayStr = ['日','月','火','水','木','金','土'][dayOfWeek];
+                    
+                    const diffDays = Math.round((checkDate.getTime() - today.getTime()) / (1000 * 3600 * 24));
+                    let relativeHtml = "";
+                    if (diffDays === 0) relativeHtml = `<span class="text-[10px] font-bold text-white bg-red-500 px-1.5 py-0.5 rounded mb-0.5 shadow-sm">今日</span>`;
+                    else if (diffDays === 1) relativeHtml = `<span class="text-[10px] font-bold text-white bg-orange-500 px-1.5 py-0.5 rounded mb-0.5 shadow-sm">明日</span>`;
+                    else if (diffDays === 2) relativeHtml = `<span class="text-[10px] font-bold text-emerald-700 border border-emerald-500 px-1.5 py-0.5 rounded mb-0.5 bg-emerald-50">明後日</span>`;
+
+                    let garbages = [];
+                    if (schedule && schedule[month]) {
+                        for (const [code, dates] of Object.entries(schedule[month])) {
+                            if (dates.includes(date)) garbages.push(code);
+                        }
+                    }
+
+                    const bgClass = garbages.length > 0 ? "bg-white" : "bg-gray-50/50 text-gray-400";
+                    
+                    let content = garbages.length > 0 
+                        ? garbages.map(c => `<span class="${GARBAGE_ICONS[c].color} font-bold text-sm bg-${GARBAGE_ICONS[c].color.split('-')[1]}-50 px-2 py-1 rounded border border-${GARBAGE_ICONS[c].color.split('-')[1]}-100 shadow-sm">${GARBAGE_ICONS[c].icon}${GARBAGE_ICONS[c].name}</span>`).join('<span class="mx-1"></span>')
+                        : '<span class="text-sm">収集なし</span>';
+
+                    scheduleList.innerHTML += `
+                        <div class="flex items-center border-b border-gray-100 py-3 ${bgClass}">
+                            <div class="w-[4.5rem] font-medium text-gray-700 flex flex-col items-center justify-center border-r border-gray-200 mr-3 pr-2">
+                                ${relativeHtml}
+                                <div class="flex items-baseline">
+                                    <span class="text-xs text-gray-400">${month}/</span>
+                                    <span class="text-xl font-bold">${date}</span>
+                                </div>
+                                <span class="text-xs text-gray-500 leading-none mt-0.5">(${dayStr})</span>
+                            </div>
+                            <div class="flex-1 flex flex-wrap gap-1">
+                                ${content}
+                            </div>
+                        </div>`;
+                    daysAdded++;
+                }
+                checkDate.setDate(checkDate.getDate() + 1);
+            }
+            loading.classList.add('hidden');
+            resultArea.classList.remove('hidden');
+        }
+
+        function checkHash() {
+            if (window.location.hash.startsWith('#town=')) {
+                const savedTown = decodeURIComponent(window.location.hash.replace('#town=', ''));
+                for (const [area, towns] of Object.entries(AREA_TOWN_MAP)) {
+                    if (towns.includes(savedTown)) {
+                        areaSelect.value = area;
+                        areaSelect.dispatchEvent(new Event('change'));
+                        townSelect.value = savedTown;
+                        townSelect.dispatchEvent(new Event('change'));
+                        break;
+                    }
+                }
+            }
+        }
+
+        initApp();
+    </script>
+</body>
+</html>
