@@ -4,7 +4,6 @@ __pycache__/
 venv/
 temp_*.pdf
 # data/ (tracked for GitHub Pages)
-data/towns/*.json
 !data/index.json
 !data/.gitkeep
 !data/towns/.gitkeep
