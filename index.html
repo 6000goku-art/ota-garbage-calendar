@@ -28,8 +28,11 @@
         <div id="loading" class="text-center text-sm font-bold text-emerald-600 py-6 animate-pulse">最新の町名データを読み込み中...</div>
 
         <div id="resultArea" class="hidden">
-            <div class="border-b-2 border-emerald-600 pb-2 mb-4">
+            <div class="border-b-2 border-emerald-600 pb-2 mb-4 flex justify-between items-end">
                 <h2 id="townTitle" class="text-lg font-bold text-emerald-800">町名</h2>
+                <a id="pdfLink" href="#" target="_blank" rel="noopener noreferrer" class="text-xs text-emerald-600 underline hover:text-emerald-800 hidden flex items-center">
+                    <span class="mr-1">🔗</span>元のPDFで確認
+                </a>
             </div>
             <div id="scheduleList" class="space-y-0"></div>
         </div>
@@ -55,6 +58,7 @@
         const scheduleList = document.getElementById('scheduleList');
         const townTitle = document.getElementById('townTitle');
         const loading = document.getElementById('loading');
+        const pdfLink = document.getElementById('pdfLink');
 
         // 裏側で生成された目次（index.json）を自動取得してメニューを作る
         async function initApp() {
@@ -99,8 +103,9 @@
             if (!town) return resultArea.classList.add('hidden');
             
             window.location.hash = `town=${encodeURIComponent(town)}`;
-            townTitle.textContent = town + " のごみ出し予定";
+            townTitle.textContent = town + " の予定";
             resultArea.classList.add('hidden');
+            pdfLink.classList.add('hidden');
             loading.textContent = "カレンダーを読み込み中...";
             loading.classList.remove('hidden');
 
@@ -113,6 +118,13 @@
                 const response = await fetch(`data/towns/${encodeURIComponent(town)}.json`);
                 if (!response.ok) throw new Error();
                 const data = await response.json();
+                
+                // PDFURLが存在する場合はリンクを表示
+                if (data.metadata && data.metadata.pdf_url) {
+                    pdfLink.href = data.metadata.pdf_url;
+                    pdfLink.classList.remove('hidden');
+                }
+                
                 renderSchedule(data.schedule);
             } catch (err) {
                 renderMock();
@@ -124,6 +136,8 @@
                 "5": { "M": [15,18,22,25,29], "P": [14,21,28], "S": [13,27], "N": [20] },
                 "6": { "M": [1,5,8,12], "P": [4,11], "S": [10], "N": [3] }
             };
+            pdfLink.href = "https://www.city.ota.gunma.jp/uploaded/attachment/38645.pdf";
+            pdfLink.classList.remove('hidden');
             renderSchedule(mockSchedule);
         }
 

@@ -68,23 +68,38 @@ def process_pdf_with_gemini(area_name, pdf_url):
         prompt = f"""
         あなたはデータエンジニアです。太田市の「{area_name}」のゴミ収集カレンダーPDFを解析し、以下のJSONフォーマットで出力してください。
 
-        【解析ルール】
-        1. "towns": このカレンダーが適用される「対象行政区（町名）」を全て抽出し、配列にする。
-        2. "schedule": 月ごとに、各ゴミの収集日の「日付の数字」を配列にする。
-           キーは月（1〜12）、その中にゴミ種類の記号（M, N, S, P, R, K, B, C）をキーとした配列を作る。
+        【解析ルール・最重要】
+        PDFのレイアウト上、文字が分断されたり誤認識されたりしています。以下の表記ゆれや分断を脳内で結合し、指定の記号に変換してください。
+        - "M" (燃えるゴミ): 「もえるごみ」「もえる」
+        - "N" (燃えないゴミ): 「もえないごみ」「もえない」
+        - "R" (ペットボトル): 「ペット ボトル」「ペット」「ボトル」が離れて配置されている場合
+        - "C" (カン): 「力 ン」「カ ン」「カン」(漢字の「力」になっている場合を含む)
+        - "B" (ビン): 「ビ ン」「ヒ ン」「ビン」
+        - "P" (プラ容器包装): 「容器包装プラスチック」「その他プラ」「プラ」「トレイ」
+        - "S" (資源ゴミ・粗大ごみ): 「資源」「粗大ごみ」「粗大」
+        - "K" (危険ごみ): 「危険ごみ」「危険」
 
-        【ゴミ種類の記号】
-        "M": 燃えるゴミ, "N": 燃えないゴミ, "S": 資源ゴミ, "P": プラ容器包装
-        "R": ペットボトル, "K": 危険ごみ, "B": ビン, "C": カン
+        【出力JSON仕様】
+        1. "towns": 対象行政区（町名）の配列。
+        2. "schedule": 月（1〜12）をキーとし、各ゴミ記号（M, N, R, C, B, P, S, K）の収集日の配列を持つオブジェクト。
 
-        【出力フォーマット例】
+        【出力例（{area_name}が藪塚本町エリア版の場合の5月の正解データ）】
         {{
             "towns": ["〇〇町", "△△町"],
             "schedule": {{
-                "4": {{ "M": [2,6,9,13,16,20,23,27,30], "N": [8,22], "S": [15,28], "P": [1,14], "R": [7,21], "K": [9], "B": [3,17], "C": [10,24] }},
-                "5": {{ "M": [4,7,11], "N": [6] }}
+                "5": {{
+                    "M": [4, 7, 11, 14, 18, 21, 25, 28],
+                    "R": [1, 19],
+                    "B": [8, 22],
+                    "C": [15, 29],
+                    "N": [6, 20],
+                    "K": [14],
+                    "P": [12, 26],
+                    "S": [13, 27]
+                }}
             }}
         }}
+        必ず上記と同じJSON構造のみを出力してください。Markdownのコードブロックは不要です。
         """
         response = model.generate_content([uploaded_file, prompt])
         genai.delete_file(uploaded_file.name)
@@ -107,7 +122,8 @@ def main():
 
     for pdf in pdf_links:
         area_name = pdf['area']
-        data = process_pdf_with_gemini(area_name, pdf['url'])
+        pdf_url = pdf['url']
+        data = process_pdf_with_gemini(area_name, pdf_url)
         
         if data and "towns" in data:
             towns = data["towns"]
@@ -117,8 +133,13 @@ def main():
                 safe_town_name = re.sub(r'[\\/*?:"<>|]', "", town)
                 if not safe_town_name: continue
                 
+                # PDFのURLもJSONに保存し、UI側で参照できるようにする
                 town_data = {
-                    "metadata": {"area": area_name, "town": safe_town_name},
+                    "metadata": {
+                        "area": area_name, 
+                        "town": safe_town_name,
+                        "pdf_url": pdf_url 
+                    },
                     "schedule": data.get("schedule", {})
                 }
                 
