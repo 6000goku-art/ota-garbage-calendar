@@ -13,7 +13,7 @@
 <body class="bg-emerald-50/50 min-h-screen p-4 flex flex-col items-center">
     <div class="w-full max-w-md bg-white rounded-xl shadow-lg border-t-4 border-emerald-600 p-6 mt-4">
         <h1 class="text-2xl font-extrabold text-center text-emerald-800 mb-1 tracking-tight">太田市 ごみ収集案内</h1>
-        <p class="text-xs text-center text-emerald-600/70 mb-6 font-medium">エリアと町名を選ぶと1週間の予定を表示します</p>
+        <p class="text-xs text-center text-emerald-600/70 mb-6 font-medium">エリアと町名を選ぶと予定を表示します</p>
 
         <div class="space-y-4 mb-6">
             <select id="areaSelect" class="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-shadow">
@@ -28,12 +28,21 @@
         <div id="loading" class="text-center text-sm font-bold text-emerald-600 py-6 animate-pulse">最新の町名データを読み込み中...</div>
 
         <div id="resultArea" class="hidden">
-            <div class="border-b-2 border-emerald-600 pb-2 mb-4 flex justify-between items-end">
-                <h2 id="townTitle" class="text-lg font-bold text-emerald-800">町名</h2>
-                <a id="pdfLink" href="#" target="_blank" rel="noopener noreferrer" class="text-xs text-emerald-600 underline hover:text-emerald-800 hidden flex items-center">
-                    <span class="mr-1">🔗</span>元のPDFで確認
-                </a>
+            <div class="border-b-2 border-emerald-600 pb-3 mb-4">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 id="townTitle" class="text-lg font-bold text-emerald-800">町名</h2>
+                    <a id="pdfLink" href="#" target="_blank" rel="noopener noreferrer" class="text-xs text-emerald-600 underline hover:text-emerald-800 hidden flex items-center">
+                        <span class="mr-1">🔗</span>元のPDFで確認
+                    </a>
+                </div>
+                
+                <!-- 表示切り替えトグル -->
+                <div class="flex bg-gray-100 p-1 rounded-lg w-full">
+                    <button id="btn1Week" class="flex-1 px-3 py-1.5 text-sm font-bold rounded-md bg-white text-emerald-700 shadow-sm transition-all duration-200">1週間分</button>
+                    <button id="btn1Month" class="flex-1 px-3 py-1.5 text-sm font-bold rounded-md text-gray-500 hover:text-gray-800 transition-all duration-200">1か月分</button>
+                </div>
             </div>
+            
             <div id="scheduleList" class="space-y-0"></div>
         </div>
     </div>
@@ -59,6 +68,39 @@
         const townTitle = document.getElementById('townTitle');
         const loading = document.getElementById('loading');
         const pdfLink = document.getElementById('pdfLink');
+        const btn1Week = document.getElementById('btn1Week');
+        const btn1Month = document.getElementById('btn1Month');
+
+        // アプリの状態管理
+        let currentViewMode = 'week'; // 'week' または 'month'
+        let currentScheduleData = null; // 取得したスケジュールを保持
+
+        // 切り替えボタンのイベントリスナー
+        btn1Week.addEventListener('click', () => {
+            currentViewMode = 'week';
+            updateToggleUI();
+            if (currentScheduleData) renderSchedule(currentScheduleData);
+        });
+
+        btn1Month.addEventListener('click', () => {
+            currentViewMode = 'month';
+            updateToggleUI();
+            if (currentScheduleData) renderSchedule(currentScheduleData);
+        });
+
+        // ボタンの見た目を更新する関数
+        function updateToggleUI() {
+            const activeClass = "flex-1 px-3 py-1.5 text-sm font-bold rounded-md bg-white text-emerald-700 shadow-sm transition-all duration-200".split(" ");
+            const inactiveClass = "flex-1 px-3 py-1.5 text-sm font-bold rounded-md text-gray-500 hover:text-gray-800 transition-all duration-200".split(" ");
+            
+            if (currentViewMode === 'week') {
+                btn1Week.className = activeClass.join(" ");
+                btn1Month.className = inactiveClass.join(" ");
+            } else {
+                btn1Month.className = activeClass.join(" ");
+                btn1Week.className = inactiveClass.join(" ");
+            }
+        }
 
         // 裏側で生成された目次（index.json）を自動取得してメニューを作る
         async function initApp() {
@@ -125,7 +167,8 @@
                     pdfLink.classList.remove('hidden');
                 }
                 
-                renderSchedule(data.schedule);
+                currentScheduleData = data.schedule; // データを保持
+                renderSchedule(currentScheduleData);
             } catch (err) {
                 renderMock();
             }
@@ -134,11 +177,13 @@
         function renderMock() {
             const mockSchedule = {
                 "5": { "M": [15,18,22,25,29], "P": [14,21,28], "S": [13,27], "N": [20] },
-                "6": { "M": [1,5,8,12], "P": [4,11], "S": [10], "N": [3] }
+                "6": { "M": [1,5,8,12,15,19,22,26,29], "P": [4,11,18,25], "S": [10,24], "N": [3,17] }
             };
             pdfLink.href = "https://www.city.ota.gunma.jp/uploaded/attachment/38645.pdf";
             pdfLink.classList.remove('hidden');
-            renderSchedule(mockSchedule);
+            
+            currentScheduleData = mockSchedule; // データを保持
+            renderSchedule(currentScheduleData);
         }
 
         function renderSchedule(schedule) {
@@ -149,8 +194,11 @@
             today.setHours(0, 0, 0, 0);
             
             let daysAdded = 0;
+            // モードに応じて表示する日数を変更（平日ベースでカウント）
+            // 1週間分: 平日7日分(約10日間), 1か月分: 平日22日分(約1ヶ月間)
+            const maxDays = currentViewMode === 'week' ? 7 : 22;
 
-            while (daysAdded < 7) {
+            while (daysAdded < maxDays) {
                 const dayOfWeek = checkDate.getDay();
                 if (dayOfWeek !== 0 && dayOfWeek !== 6) { 
                     const month = (checkDate.getMonth() + 1).toString();
