@@ -105,13 +105,9 @@
         // 裏側で生成された目次（index.json）を自動取得してメニューを作る
         async function initApp() {
             try {
-                if (window.location.protocol === 'blob:' || window.location.protocol === 'file:') {
-                    AREA_TOWN_MAP = { "太田エリア版 (モック)": ["飯田町"] };
-                } else {
-                    const res = await fetch('data/index.json');
-                    if (!res.ok) throw new Error();
-                    AREA_TOWN_MAP = await res.json();
-                }
+                const res = await fetch('data/index.json');
+                if (!res.ok) throw new Error();
+                AREA_TOWN_MAP = await res.json();
 
                 areaSelect.innerHTML = '<option value="">-- 1. エリアを選択 --</option>';
                 for (const area in AREA_TOWN_MAP) {
@@ -152,11 +148,6 @@
             loading.classList.remove('hidden');
 
             try {
-                if (window.location.protocol === 'blob:' || window.location.protocol === 'file:') {
-                    setTimeout(() => renderMock(), 800);
-                    return;
-                }
-                
                 const response = await fetch(`data/towns/${encodeURIComponent(town)}.json`);
                 if (!response.ok) throw new Error();
                 const data = await response.json();
@@ -170,21 +161,10 @@
                 currentScheduleData = data.schedule; // データを保持
                 renderSchedule(currentScheduleData);
             } catch (err) {
-                renderMock();
+                console.error(err);
+                loading.textContent = "カレンダーの取得に失敗しました。";
             }
         });
-
-        function renderMock() {
-            const mockSchedule = {
-                "5": { "M": [15,18,22,25,29], "P": [14,21,28], "S": [13,27], "N": [20] },
-                "6": { "M": [1,5,8,12,15,19,22,26,29], "P": [4,11,18,25], "S": [10,24], "N": [3,17] }
-            };
-            pdfLink.href = "https://www.city.ota.gunma.jp/uploaded/attachment/38645.pdf";
-            pdfLink.classList.remove('hidden');
-            
-            currentScheduleData = mockSchedule; // データを保持
-            renderSchedule(currentScheduleData);
-        }
 
         function renderSchedule(schedule) {
             scheduleList.innerHTML = '';
